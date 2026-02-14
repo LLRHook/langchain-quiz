@@ -20,10 +20,15 @@ class QuizQuestion(BaseModel):
     options: list[str] = Field(description="Four answer choices", min_length=4, max_length=4)
     correct_index: int = Field(description="Index (0-3) of the correct answer", ge=0, le=3)
     explanation: str = Field(description="Brief explanation of why the correct answer is right")
+    sources: list[str] = Field(default_factory=list, description="URLs of web sources that informed this question")
 
 
 class Quiz(BaseModel):
     questions: list[QuizQuestion] = Field(description="List of quiz questions")
+
+
+class TopicList(BaseModel):
+    topics: list[str] = Field(description="Key topics or claims to search for")
 
 
 SYSTEM_PROMPT = """You are a quiz generator. Given text content, create multiple-choice questions that test understanding of the key concepts.
