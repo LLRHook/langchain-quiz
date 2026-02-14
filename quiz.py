@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -40,12 +41,81 @@ Rules:
 - Explanations should be concise but educational.
 - Make wrong options plausible but clearly incorrect to someone who understood the material."""
 
+WEB_ENHANCED_SYSTEM_PROMPT = """You are a quiz generator. Given text content and supplementary web research, create multiple-choice questions that test deep understanding of the key concepts.
 
-def build_quiz_prompt(text: str, num_questions: int, difficulty: str) -> str:
-    return (
+Rules:
+- Focus on the substantive content. Ignore ads, navigation, promotional material, or boilerplate.
+- Each question should have exactly 4 options with one correct answer.
+- Questions should range from factual recall to conceptual understanding.
+- Use the web research to craft deeper questions and richer explanations than the source text alone would allow.
+- Explanations should be concise but educational, incorporating insights from web sources where relevant.
+- Make wrong options plausible but clearly incorrect to someone who understood the material.
+- For each question, include the URLs of web sources that informed it in the sources field. Only include URLs that were actually relevant to that specific question."""
+
+TOPIC_EXTRACTION_PROMPT = """Extract the {num_topics} most important topics or specific claims from the following text. These will be used as web search queries to find supplementary information.
+
+Return short, search-friendly phrases (not full sentences).
+
+Text:
+{text}"""
+
+
+def search_topics(
+    text: str,
+    tavily_api_key: str,
+    model: str = "llama3",
+    base_url: str = "http://localhost:11434",
+    num_topics: int = 3,
+) -> str:
+    """Extract key topics from text via LLM, then search each with Tavily.
+
+    Returns a combined context string with source URLs.
+    """
+    from langchain_tavily import TavilySearch
+
+    llm = ChatOllama(model=model, base_url=base_url, temperature=0.0)
+    structured_llm = llm.with_structured_output(TopicList)
+
+    messages = [
+        HumanMessage(content=TOPIC_EXTRACTION_PROMPT.format(num_topics=num_topics, text=text)),
+    ]
+    topic_list = structured_llm.invoke(messages)
+
+    search = TavilySearch(
+        max_results=2,
+        topic="general",
+        tavily_api_key=tavily_api_key,
+    )
+
+    context_parts = []
+    for topic in topic_list.topics:
+        try:
+            response = search.invoke({"query": topic})
+            results = response.get("results", []) if isinstance(response, dict) else []
+            for result in results:
+                url = result.get("url", "")
+                content = result.get("content", "")
+                if content:
+                    context_parts.append(f"[Source: {url}]\n{content}")
+        except Exception as e:
+            print(f"  Warning: search failed for '{topic}': {e}", file=sys.stderr)
+
+    return "\n\n".join(context_parts)
+
+
+def build_quiz_prompt(text: str, num_questions: int, difficulty: str, web_context: str = "") -> str:
+    prompt = (
         f"Generate {num_questions} multiple-choice questions at {difficulty} difficulty "
         f"based on the following text:\n\n{text}"
     )
+    if web_context:
+        prompt += (
+            f"\n\n--- Supplementary Web Research ---\n"
+            f"Use these sources for deeper questions and richer explanations. "
+            f"Include relevant source URLs in each question's sources field.\n\n"
+            f"{web_context}"
+        )
+    return prompt
 
 
 def generate_quiz(
@@ -55,6 +125,7 @@ def generate_quiz(
     num_questions: int = 5,
     difficulty: str = "medium",
     temperature: float = 0.7,
+    web_context: str = "",
 ) -> Quiz:
     llm = ChatOllama(
         model=model,
@@ -64,9 +135,10 @@ def generate_quiz(
 
     structured_llm = llm.with_structured_output(Quiz)
 
+    system_prompt = WEB_ENHANCED_SYSTEM_PROMPT if web_context else SYSTEM_PROMPT
     messages = [
-        SystemMessage(content=SYSTEM_PROMPT),
-        HumanMessage(content=build_quiz_prompt(text, num_questions, difficulty)),
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=build_quiz_prompt(text, num_questions, difficulty, web_context)),
     ]
 
     return structured_llm.invoke(messages)
