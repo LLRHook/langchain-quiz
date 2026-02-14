@@ -176,7 +176,12 @@ def run_interactive_quiz(quiz: Quiz) -> None:
             print(f"  Wrong. You chose {letters[chosen]}) {q.options[chosen]}")
             print(f"  Correct answer: {letters[correct]}) {q.options[correct]}")
 
-        print(f"  Explanation: {q.explanation}\n")
+        print(f"  Explanation: {q.explanation}")
+        if q.sources:
+            print(f"  Sources:")
+            for url in q.sources:
+                print(f"    - {url}")
+        print()
         print("-" * 50)
 
     pct = round(score / total * 100)
