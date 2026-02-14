@@ -199,6 +199,8 @@ def main():
     parser.add_argument("-d", "--difficulty", choices=["easy", "medium", "hard"], default="medium")
     parser.add_argument("-t", "--temperature", type=float, default=0.7, help="LLM temperature (default: 0.7)")
     parser.add_argument("--json", action="store_true", help="Output quiz as JSON instead of interactive mode")
+    parser.add_argument("--web", action="store_true", help="Enrich questions with Tavily web search")
+    parser.add_argument("--tavily-key", default=None, help="Tavily API key (also reads TAVILY_API_KEY env var)")
     args = parser.parse_args()
 
     if args.input:
@@ -212,6 +214,27 @@ def main():
     if len(text) < 50:
         parser.error("Input text is too short to generate a meaningful quiz")
 
+    web_context = ""
+    if args.web:
+        tavily_key = args.tavily_key or os.environ.get("TAVILY_API_KEY")
+        if not tavily_key:
+            parser.error("--web requires a Tavily API key via --tavily-key or TAVILY_API_KEY env var")
+
+        print(f"Searching web for supplementary context...")
+        try:
+            web_context = search_topics(
+                text=text,
+                tavily_api_key=tavily_key,
+                model=args.model,
+                base_url=args.url,
+            )
+            if web_context:
+                print(f"Found web context ({len(web_context)} chars)")
+            else:
+                print("No web results found, proceeding with text only")
+        except Exception as e:
+            print(f"Warning: web search failed ({e}), proceeding with text only", file=sys.stderr)
+
     print(f"Generating {args.num_questions} questions with {args.model}...")
 
     try:
@@ -222,6 +245,7 @@ def main():
             num_questions=args.num_questions,
             difficulty=args.difficulty,
             temperature=args.temperature,
+            web_context=web_context,
         )
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
