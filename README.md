@@ -75,3 +75,7 @@ This produces deeper questions and richer explanations with source URLs. It work
 ```
 
 The `sources` field is populated when using `--web` mode, empty otherwise.
+
+## Related
+
+See [QuizMe](https://github.com/LLRHook/quizme) for a Chrome extension that generates quizzes directly from any web page.
